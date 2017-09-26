@@ -1,6 +1,6 @@
 Name:           kmodtool
 Version:        1
-Release:        26%{?dist}
+Release:        27%{?dist}
 Summary:        Tool for building kmod packages
 License:        MIT
 URL:            http://rpmfusion.org/Packaging/KernelModules/Kmods2
@@ -46,6 +46,9 @@ sed -i 's|%{_sbindir}/depmod|/sbin/depmod|g' $RPM_BUILD_ROOT%{_bindir}/kmodtool
 
 
 %changelog
+* Tue Sep 26 2017 Stanislas Leduc <stanislas.leduc@balinor.net> - 1-27
+- Implement modsign method to use with UEFI Secure Boot machines 
+
 * Tue Sep 19 2017 Robert Scheck <robert@fedoraproject.org> - 1-26
 - Add conditional fix for (/usr)/sbin/depmod for RHEL/CentOS 6
 
