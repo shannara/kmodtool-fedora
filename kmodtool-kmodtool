@@ -193,6 +193,20 @@ kernel ${kernel_uname_r} for the %{_target_cpu} family of processors.
 
 
 EOF
+
+## Sign modules only need
+if grep -q "SIGNMOD=enabled" /etc/akmods/sign-keypair.conf > /dev/null; then
+	cat <<EOF
+%define __modsign_install_post \
+/usr/bin/kmodsign /etc/akmods/keys/private_key.priv /etc/akmods/keys/public_key.der \$RPM_BUILD_ROOT/%{kmodinstdir_prefix}${kernel_uname_r}%{kmodinstdir_postfix}/ ${kernel_uname_r} \
+
+%global __spec_install_post \
+  %{?__debug_package:%{__debug_install_post}}\
+  %{__arch_install_post}\
+  %{__os_install_post}\
+  %{__modsign_install_post}
+EOF
+fi
 }
 
 print_rpmtemplate_kmodmetapkg ()

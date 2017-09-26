@@ -7,6 +7,7 @@ URL:            http://rpmfusion.org/Packaging/KernelModules/Kmods2
 # We are upstream, these files are maintained directly in pkg-git
 Source1:        %{name}-kmodtool
 Source2:        %{name}-kernel-variants
+Source3:        %{name}-kmodsign
 BuildArch:      noarch
 
 %description
@@ -25,7 +26,9 @@ building kmod-packages.
 %install
 mkdir -p $RPM_BUILD_ROOT/%{_bindir} $RPM_BUILD_ROOT/%{_datadir}/%{name}/
 install -p -m 0755 %{SOURCE1}  $RPM_BUILD_ROOT/%{_bindir}/kmodtool
+install -p -m 0755 %{SOURCE3}  $RPM_BUILD_ROOT/%{_bindir}/kmodsign
 install -p -m 0644 %{SOURCE2} $RPM_BUILD_ROOT/%{_datadir}/%{name}/kernel-variants
+
 
 # adjust default-path
 sed -i 's|^default_prefix=.*|default_prefix=%{_datadir}/%{name}/|'  \
