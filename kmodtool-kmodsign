@@ -15,26 +15,27 @@ KERNELSRC=$4
 
 moddir=$3
 
-modules=`find $moddir -name *.ko`
+modules=$(find $moddir -name "*.ko")
 
 for mod in $modules
 do
-    dir=`dirname $mod`
-    file=`basename $mod`
+    dir=$(dirname $mod)
+    file=$(basename $mod)
 
-    /usr/src/kernels/${KERNELSRC}/scripts/sign-file sha256 ${MODSECKEY} ${MODPUBKEY} ${dir}/${file}
+    if $(file -i /usr/src/kernels/${KERNELSRC}/scripts/sign-file | sed -e "s%.*: %%g" -e "s%;.*%%g" | grep -q "text/x-perl") ; then
+        perl /usr/src/kernels/${KERNELSRC}/scripts/sign-file sha256 ${MODSECKEY} ${MODPUBKEY} ${dir}/${file}
+    else
+        /usr/src/kernels/${KERNELSRC}/scripts/sign-file sha256 ${MODSECKEY} ${MODPUBKEY} ${dir}/${file}
+    fi
     rm -f ${dir}/${file}.{sig,dig}
 done
 
-RANDOMMOD=$(find $moddir -type f -name '*.ko' | sort -R | head -n 1)
+RANDOMMOD=$(find $moddir -type f -name "*.ko" | sort -R | head -n 1)
 if [ "~Module signature appended~" != "$(tail -c 28 $RANDOMMOD)" ]; then
     echo "*****************************"
     echo "*** Modules are unsigned! ***"
     echo "*****************************"
     exit 1
 fi
-
-# Compress signed modules
-find $moddir -name "*.ko" | xargs xz;
 
 exit 0

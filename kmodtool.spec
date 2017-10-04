@@ -8,6 +8,10 @@ URL:            http://rpmfusion.org/Packaging/KernelModules/Kmods2
 Source1:        %{name}-kmodtool
 Source2:        %{name}-kernel-variants
 Source3:        %{name}-kmodsign
+Source4:        README.secureboot
+Source5:        cacert.config
+Source6:        %{name}-kmodgenca
+Source7:        sign-keypair.conf
 BuildArch:      noarch
 
 %description
@@ -16,19 +20,20 @@ building kmod-packages.
 
 
 %prep
-# nothing to prep
-
+cp -p %{SOURCE4} .
 
 %build
 # nothing to build
 
 
 %install
-mkdir -p $RPM_BUILD_ROOT/%{_bindir} $RPM_BUILD_ROOT/%{_datadir}/%{name}/
+mkdir -p $RPM_BUILD_ROOT/%{_bindir} $RPM_BUILD_ROOT/%{_datadir}/%{name}/ $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/keys 
 install -p -m 0755 %{SOURCE1}  $RPM_BUILD_ROOT/%{_bindir}/kmodtool
 install -p -m 0755 %{SOURCE3}  $RPM_BUILD_ROOT/%{_bindir}/kmodsign
-install -p -m 0644 %{SOURCE2} $RPM_BUILD_ROOT/%{_datadir}/%{name}/kernel-variants
-
+install -p -m 0755 %{SOURCE6}  $RPM_BUILD_ROOT/%{_bindir}/kmodgenca
+install -p -m 0644 %{SOURCE2}  $RPM_BUILD_ROOT/%{_datadir}/%{name}/kernel-variants
+install -p -m 0640 %{SOURCE5}  $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/
+install -p -m 0640 %{SOURCE7}  $RPM_BUILD_ROOT/%{_sysconfdir}/%{name}/
 
 # adjust default-path
 sed -i 's|^default_prefix=.*|default_prefix=%{_datadir}/%{name}/|'  \
@@ -39,10 +44,17 @@ sed -i 's|^default_prefix=.*|default_prefix=%{_datadir}/%{name}/|'  \
 sed -i 's|%{_sbindir}/depmod|/sbin/depmod|g' $RPM_BUILD_ROOT%{_bindir}/kmodtool
 %endif
 
+%pre
+# create group and user
+groupadd -r akmods
 
 %files
+%doc README.secureboot
 %{_bindir}/*
+%{_sysconfdir}/%{name}
 %{_datadir}/%{name}
+%attr(750,root,akmods) %{_sysconfdir}/kmodtool/keys
+%attr(640,root,akmods) %{_sysconfdir}/kmodtool/sign-keypair.conf
 
 
 %changelog

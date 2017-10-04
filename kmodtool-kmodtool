@@ -51,7 +51,7 @@ error_out()
 print_rpmtemplate_header()
 {
 	echo
-	echo '%global kmodinstdir_prefix  '/usr/lib/modules/
+	echo '%global kmodinstdir_prefix  '${usr_lib_modules}/
 	echo '%global kmodinstdir_postfix '/extra/${kmodname}/
 	echo '%global kernel_versions     '${kernel_versions}
 	echo
@@ -69,7 +69,7 @@ rpmbuild --define "_sourcedir %{_sourcedir}" \\\
 ln -s \$(ls \$RPM_BUILD_ROOT/%{_usrsrc}/akmods/) \$RPM_BUILD_ROOT/%{_usrsrc}/akmods/${kmodname}-kmod.latest
 
 %package -n akmod-${kmodname}
-Summary:	Akmod package for ${kmodname} kernel module(s) 
+Summary:	Akmod package for ${kmodname} kernel module(s)
 Group: 		System Environment/Kernel
 Requires:   kmodtool
 Requires: 	akmods
@@ -143,6 +143,34 @@ print_rpmtemplate_per_kmodpkg ()
 	local kernel_uname_r=${1}
 	local kernel_variant="${2:+-${2}}"
 
+	if [[ -h /sbin ]] ; then
+		echo '%global  _prefix_usr      '/usr
+	fi
+
+	echo
+	echo '# Sign modules on x86.  Make sure the config files match this setting if more'
+	echo '# architectures are added.'
+	echo '%ifarch %{ix86} x86_64'
+	if $(grep -q "SIGNMOD=enabled" /etc/kmodtool/sign-keypair.conf > /dev/null) ; then
+		echo '%global signmodules 1'
+		privkey=$(grep "PRIVATE_KEY=" /etc/kmodtool/sign-keypair.conf | sed -e 's%PRIVATE_KEY=%%g')
+		pubkey=$(grep "PUBLIC_KEY=" /etc/kmodtool/sign-keypair.conf | sed -e 's%PUBLIC_KEY=%%g')
+	else
+		echo '%global signmodules 0'
+	fi
+	echo '%global zipmodules 1'
+	echo '%else'
+	if $(grep -q "SIGNMOD=enabled" /etc/kmodtool/sign-keypair.conf > /dev/null) ; then
+		echo '%global signmodules 1'
+		privkey=$(grep "PRIVATE_KEY=" /etc/kmodtool/sign-keypair.conf | sed -e 's%PRIVATE_KEY=%%g')
+		pubkey=$(grep "PUBLIC_KEY=" /etc/kmodtool/sign-keypair.conf | sed -e 's%PUBLIC_KEY=%%g')
+	else
+		echo '%global signmodules 0'
+	fi
+	echo '%global zipmodules 0'
+	echo '%endif'
+	echo
+
     # first part
 	cat <<EOF
 %package       -n kmod-${kmodname}-${kernel_uname_r}
@@ -151,8 +179,8 @@ Group:            System Environment/Kernel
 Provides:         kernel-modules-for-kernel = ${kernel_uname_r}
 Provides:         ${kmodname}-kmod = %{?epoch:%{epoch}:}%{version}-%{release}
 Requires:         ${kmodname}-kmod-common >= %{?epoch:%{epoch}:}%{version}
-Requires(post):   /usr/sbin/depmod
-Requires(postun): /usr/sbin/depmod
+Requires(post):   %{?_prefix_usr}/sbin/depmod
+Requires(postun): %{?_prefix_usr}/sbin/depmod
 EOF
 
 	if [[ ${obsolete_name} ]]; then
@@ -166,17 +194,17 @@ EOF
 Requires:         kernel-uname-r = ${kernel_uname_r}
 BuildRequires:	  kernel-devel-uname-r = ${kernel_uname_r}
 %post          -n kmod-${kmodname}-${kernel_uname_r}
-/usr/sbin/depmod -aeF /boot/System.map-${kernel_uname_r} ${kernel_uname_r} > /dev/null || :
+%{?_prefix_usr}/sbin/depmod -aeF /boot/System.map-${kernel_uname_r} ${kernel_uname_r} > /dev/null || :
 %postun        -n kmod-${kmodname}-${kernel_uname_r}
-/usr/sbin/depmod  -aF /boot/System.map-${kernel_uname_r} ${kernel_uname_r} &> /dev/null || :
+%{?_prefix_usr}/sbin/depmod  -aF /boot/System.map-${kernel_uname_r} ${kernel_uname_r} &> /dev/null || :
 
 EOF
 	else
 	  cat <<EOF
 %post          -n kmod-${kmodname}-${kernel_uname_r}
-[[ "$(uname -r)" == "${kernel_uname_r}"  ]] && /usr/sbin/depmod -a > /dev/null || :
+[[ "$(uname -r)" == "${kernel_uname_r}"  ]] && %{?_prefix_usr}/sbin/depmod -a > /dev/null || :
 %postun        -n kmod-${kmodname}-${kernel_uname_r}
-[[ "$(uname -r)" == "${kernel_uname_r}"  ]] && /usr/sbin/depmod -a > /dev/null || :
+[[ "$(uname -r)" == "${kernel_uname_r}"  ]] && %{?_prefix_usr}/sbin/depmod -a > /dev/null || :
 
 EOF
 	fi
@@ -188,25 +216,34 @@ This package provides the ${kmodname} kernel modules built for the Linux
 kernel ${kernel_uname_r} for the %{_target_cpu} family of processors.
 %files        -n kmod-${kmodname}-${kernel_uname_r}
 %defattr(644,root,root,755)
-%dir /usr/lib/modules/${kernel_uname_r}/extra
-/usr/lib/modules/${kernel_uname_r}/extra/${kmodname}/
-
-
+%dir ${usr_lib_modules}/${kernel_uname_r}/extra
+${usr_lib_modules}/${kernel_uname_r}/extra/${kmodname}/
 EOF
 
-## Sign modules only need
-if grep -q "SIGNMOD=enabled" /etc/akmods/sign-keypair.conf > /dev/null; then
-	cat <<EOF
-%define __modsign_install_post \
-/usr/bin/kmodsign /etc/akmods/keys/private_key.priv /etc/akmods/keys/public_key.der \$RPM_BUILD_ROOT/%{kmodinstdir_prefix}${kernel_uname_r}%{kmodinstdir_postfix}/ ${kernel_uname_r} \
+  ## Sign modules only need
+	if [[ "x${privkey}" != "x" ]] && [[ "x${pubkey}" != "x" ]] && [[ -e "${privkey}" ]] && [[ -e "${pubkey}" ]] ; then
+echo
+echo "%define modsign_cmd /usr/bin/kmodsign"
+echo
 
-%global __spec_install_post \
-  %{?__debug_package:%{__debug_install_post}}\
-  %{__arch_install_post}\
-  %{__os_install_post}\
+	    cat <<EOF
+%define __modsign_install_post \\
+  if [ "%{signmodules}" -eq "1" ]; then \\
+    %{modsign_cmd} ${privkey} ${pubkey} \$RPM_BUILD_ROOT/%{kmodinstdir_prefix}${kernel_uname_r}%{kmodinstdir_postfix}/ ${kernel_uname_r} \\
+  fi \\
+  if [ "%{zipmodules}" -eq "1" ]; then \\
+    find \$RPM_BUILD_ROOT${usr_lib_modules}/ -type f -name '*.ko' | xargs xz; \\
+  fi \\
+%{nil}
+
+%global __spec_install_post \\
+  %{?__debug_package:%{__debug_install_post}}\\
+  %{__arch_install_post}\\
+  %{__os_install_post}\\
   %{__modsign_install_post}
 EOF
-fi
+
+	fi
 }
 
 print_rpmtemplate_kmodmetapkg ()
@@ -222,7 +259,7 @@ Group:           System Environment/Kernel
 Provides:        ${kmodname}-kmod = %{?epoch:%{epoch}:}%{version}-%{release}
 Requires:        kmod-${kmodname}-${kernel_uname_r} >= %{?epoch:%{epoch}:}%{version}-%{release}
 EOF
-	
+
 		if [[ ${obsolete_name} ]]; then
 			echo "Provides:        kmod-${obsolete_name}${kernel_variant} = ${obsolete_version}"
 			echo "Obsoletes:       kmod-${obsolete_name}${kernel_variant} < ${obsolete_version}"
@@ -253,14 +290,14 @@ print_customrpmtemplate ()
 			# parse kernel versions string and print template
 			local kernel_verrelarch=${kernel%%${kernels_known_variants}}
 			print_rpmtemplate_per_kmodpkg --redhat ${kernel} ${kernel##${kernel_verrelarch}}
-		elif [[ -e /usr/lib/modules/"${kernel}"/build/Makefile ]] ; then 
+		elif [[ -e "${usr_lib_modules}"/"${kernel}"/build/Makefile ]] ; then
 			# likely a user-build-kernel with available buildfiles
 			# fixme: we should check if uname from Makefile is the same as ${kernel}
 
-			kernel_versions="${kernel_versions}${kernel}___/usr/lib/modules/${kernel}/build/ "
+			kernel_versions="${kernel_versions}${kernel}___${usr_lib_modules}/${kernel}/build/ "
 			print_rpmtemplate_per_kmodpkg --custom "${kernel}"
 		else
-			error_out 2 "Don't know how to handle ${kernel} -- /usr/lib/modules/${kernel}/build/Makefile not found"
+			error_out 2 "Don't know how to handle ${kernel} -- ${usr_lib_modules}/${kernel}/build/Makefile not found"
 		fi
 	done
 
@@ -285,7 +322,7 @@ print_rpmtemplate ()
 
 		local kernel_verrelarch=${kernel%%${kernels_known_variants}}
 
-		# create metapackage 
+		# create metapackage
 		print_rpmtemplate_kmodmetapkg ${kernel} ${kernel##${kernel_verrelarch}}
 
 		# create package
@@ -313,7 +350,7 @@ while [ "${1}" ] ; do
 			shift
 			if [[ ! "${1}" ]] ; then
 				error_out 2 "Please provide path to a filter-file together with --filterfile" >&2
-			elif [[ ! -e "${1}" ]]; then	
+			elif [[ ! -e "${1}" ]]; then
 				error_out 2 "Filterfile ${1} not found" >&2
 			fi
 			filterfile="${1}"
@@ -397,12 +434,18 @@ while [ "${1}" ] ; do
 	esac
 done
 
+if [[ -h /lib ]] ; then
+	usr_lib_modules=/usr/lib/modules
+else
+	usr_lib_modules=/lib/modules
+fi
+
 if [[ -e ./kmodtool-kernel-variants ]]; then
 	kernels_known_variants="$(cat ./kmodtool-kernel-variants)"
 elif [[ -e /usr/share/kmodtool/kernel-variants ]] ; then
 	kernels_known_variants="$(cat /usr/share/kmodtool/kernel-variants)"
 else
-	error_out 2  "Could not find /usr/share/kmodtool/kernel-variants"	
+	error_out 2  "Could not find /usr/share/kmodtool/kernel-variants"
 fi
 
 # general sanity checks
@@ -437,7 +480,7 @@ else
 	# call buildsys-build-${repo}-kerneldevpkgs to get the list of kernels
 	cmdoptions="--target ${target}"
 
-	# filterfile to filter list of kernels?	
+	# filterfile to filter list of kernels?
 	if [[ "${filterfile}" ]] ; then
 		 cmdoptions="${cmdoptions} --filterfile ${filterfile}"
 	fi
@@ -452,5 +495,5 @@ else
 		print_akmodtemplate
 	fi
 
-	print_rpmtemplate 
+	print_rpmtemplate
 fi
