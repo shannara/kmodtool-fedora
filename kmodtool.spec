@@ -45,8 +45,8 @@ sed -i 's|%{_sbindir}/depmod|/sbin/depmod|g' $RPM_BUILD_ROOT%{_bindir}/kmodtool
 %endif
 
 %pre
-# create group and user
-groupadd -r akmods
+# create group akmods if not exist
+getent group akmods >/dev/null || groupadd -r akmods
 
 %files
 %doc README.secureboot
